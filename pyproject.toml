@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edith"
+version = "0.1.0"
+description = "Fast local voice engine for Friday: speech-to-text, then text-to-speech."
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy>=1.26,<3",
+  "scipy>=1.11",
+  "soundfile>=0.12.1",
+]
+
+[project.optional-dependencies]
+# Speech-to-text (M2, M3)
+stt = ["faster-whisper>=1.1", "jiwer>=3.0"]
+# Text-to-speech (M4 to M6)
+tts = ["kokoro-onnx>=0.4", "sherpa-onnx>=1.10"]
+# Microphone and speaker (M3, M6)
+audio = ["sounddevice>=0.4.6"]
+# CUDA 12 libraries for faster-whisper on the GPU (M2)
+gpu = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "models: needs downloaded model files (downloads them on first run)",
+  "gpu: needs a working CUDA GPU (skipped otherwise)",
+]
