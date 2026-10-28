@@ -112,13 +112,13 @@ text -> normalise (text.py) -> phonemes -> chunker (clause boundaries, carried s
   synthetic signals. Needs only numpy.
 - [x] `edith/text.py`: normalisation for speech (numbers, dates, times, currency, units,
   abbreviations, symbols) with thorough tests.
-- [ ] `edith/models.py`: downloads and checks model files (pinned URLs and SHA-256) into
+- [x] `edith/models.py`: downloads and checks model files (pinned URLs and SHA-256) into
   `models/`.
-- [ ] `edith/tts/engine.py`: `Synthesizer(voice="edith", speed=1.0, device="auto")` with a
+- [x] `edith/tts/engine.py`: `Synthesizer(voice="edith", speed=1.0, device="auto")` with a
   pluggable `Backend` (acoustic model + vocoder). `synthesize(text) -> (samples, rate)`,
   `stream(text)` yields smoothed chunks, `save(text, path)`, `voices()`. First backend:
   **Kokoro-82M ONNX** (kokoro-onnx) as the baseline, so the whole engine works before training.
-- [ ] **Round trip:** 20 fixed test sentences (numbers, names, units, questions) are spoken and
+- [x] **Round trip:** 20 fixed test sentences (numbers, names, units, questions) are spoken and
   transcribed by the M2 transcriber. WER ≤ 5%.
 - [ ] `edith/quality.py`: UTMOS score, F0 jitter and shimmer, join metrics.
   `python -m edith.quality` writes `output/quality.md`.

@@ -349,6 +349,7 @@ def _times(text: str) -> str:
         return spoken + (f" {ap.upper()} M" if ap else "") + _sentence_end(m)
 
     text = _sub(rf"\b(\d{{1,2}}):(\d{{2}})(?!:?\d)(?:\s?{AMPM})?", clock, text)
+    text = _sub(rf"\b(\d{{1,2}})\.(\d{{2}})\s?{AMPM}", clock, text)  # British "3.30 pm"
     return _sub(rf"\b(\d{{1,2}})\s?{AMPM}", lambda m: (
         f"{cardinal(int(m.group(1)))} {m.group(2).upper()} M{_sentence_end(m)}"), text)
 

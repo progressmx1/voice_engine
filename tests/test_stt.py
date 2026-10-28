@@ -162,7 +162,11 @@ def test_transcribe_returns_transcript_with_segments_and_rtf() -> None:
 
     result = transcriber.transcribe(np.zeros(32000, dtype=np.float32))
 
-    assert fake.kwargs == {"device": "cpu", "compute_type": "int8"}
+    assert fake.kwargs == {
+        "device": "cpu",
+        "compute_type": "int8",
+        "download_root": str(stt.WHISPER_DIR),
+    }
     assert fake.transcribe_kwargs["language"] == "en"
     assert fake.transcribe_kwargs["beam_size"] == 5
     assert np.asarray(fake.audio).shape == (32000,)

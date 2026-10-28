@@ -109,6 +109,8 @@ CASES = [
     ("by 7 p.m. Then", "by seven P M. Then"),
     ("by 7 p.m.", "by seven P M."),
     ("7 p.m. or later", "seven P M or later"),
+    ("at 3.30 p.m. today", "at three thirty P M today"),
+    ("costs 3.30 now", "costs three point three zero now"),
     # Percent, temperature, units
     ("up 12%", "up twelve percent"),
     ("-3.5%", "minus three point five percent"),

@@ -97,6 +97,18 @@ setup_cuda_dlls()
 
 import faster_whisper  # noqa: E402  (needs the DLL setup above)
 
+from edith.models import MODELS_DIR  # noqa: E402
+
+#: faster-whisper downloads its CTranslate2 models here (git-ignored), not the user cache.
+WHISPER_DIR = MODELS_DIR / "whisper"
+
+
+def _load_model(model: str, device: str, compute_type: str) -> faster_whisper.WhisperModel:
+    """Load (downloading on first use into ``models/whisper``) a faster-whisper model."""
+    return faster_whisper.WhisperModel(
+        model, device=device, compute_type=compute_type, download_root=str(WHISPER_DIR)
+    )
+
 
 @dataclass(frozen=True)
 class Segment:
@@ -195,9 +207,7 @@ class Transcriber:
         self.device = _resolve_device(device, _cuda_device_count())
         self.compute_type = _resolve_compute_type(compute_type, self.device)
         try:
-            self._model = faster_whisper.WhisperModel(
-                self.model, device=self.device, compute_type=self.compute_type
-            )
+            self._model = _load_model(self.model, self.device, self.compute_type)
         except RuntimeError as exc:
             if not _is_cuda_library_error(exc) or self.device != "cuda":
                 raise
@@ -208,9 +218,7 @@ class Transcriber:
             )
             self.device = "cpu"
             self.compute_type = "int8"
-            self._model = faster_whisper.WhisperModel(
-                self.model, device="cpu", compute_type="int8"
-            )
+            self._model = _load_model(self.model, "cpu", "int8")
 
     def transcribe(
         self,
@@ -247,9 +255,7 @@ class Transcriber:
         """Swap the model for a CPU int8 model after a CUDA failure."""
         self.device = "cpu"
         self.compute_type = "int8"
-        self._model = faster_whisper.WhisperModel(
-            self.model, device="cpu", compute_type="int8"
-        )
+        self._model = _load_model(self.model, "cpu", "int8")
 
     def _transcribe(
         self, audio_arg: str | np.ndarray, language: str, beam_size: int
