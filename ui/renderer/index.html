@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'"
+    />
+    <title>Edith</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Edith — voice engine test UI</h1>
+      <p id="status" class="muted">connecting…</p>
+    </header>
+
+    <nav>
+      <button data-tab="stt" class="tab-btn active">STT</button>
+      <button data-tab="bench" class="tab-btn">Benchmark</button>
+      <button data-tab="tts" class="tab-btn">TTS</button>
+    </nav>
+
+    <main>
+      <section id="tab-stt" class="tab">
+        <h2>Speech-to-text</h2>
+
+        <div class="row wrap">
+          <label>
+            Source
+            <select id="stt-source">
+              <option value="file">Audio file</option>
+              <option value="mic">Microphone</option>
+            </select>
+          </label>
+          <button id="stt-pick" type="button">Choose file…</button>
+          <button id="stt-record" type="button" disabled>Record</button>
+          <button id="stt-stop" type="button" disabled>Stop &amp; transcribe</button>
+          <label>
+            Model
+            <select id="stt-model">
+              <option value="large-v3-turbo">large-v3-turbo</option>
+              <option value="small.en">small.en</option>
+            </select>
+          </label>
+          <label>
+            Device
+            <select id="stt-device">
+              <option value="auto">auto</option>
+              <option value="cpu">cpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </label>
+          <button id="stt-run" type="button" disabled>Transcribe</button>
+        </div>
+
+        <div id="stt-file-name" class="muted"></div>
+        <div id="stt-error" class="error" hidden></div>
+
+        <h3>Transcript</h3>
+        <pre id="stt-text" class="box">—</pre>
+
+        <h3>Metrics</h3>
+        <div id="stt-metrics" class="metrics">—</div>
+
+        <h3>Segments</h3>
+        <table id="stt-segments">
+          <thead>
+            <tr><th>Start</th><th>End</th><th>Text</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section id="tab-bench" class="tab" hidden>
+        <h2>Benchmark</h2>
+        <p>
+          Reads <code>output/bench.json</code> (written by
+          <code>python -m edith.bench all</code>).
+        </p>
+        <button id="bench-refresh" type="button">Refresh</button>
+        <div id="bench-content" class="muted">No benchmark data yet.</div>
+      </section>
+
+      <section id="tab-tts" class="tab" hidden>
+        <h2>Text-to-speech</h2>
+        <p class="muted">
+          TTS is not implemented yet (M4 milestone). This panel is a placeholder.
+        </p>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

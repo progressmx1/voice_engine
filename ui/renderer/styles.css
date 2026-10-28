@@ -1,0 +1,113 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 1000px;
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+h2 {
+  margin-top: 8px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.tab-btn {
+  padding: 6px 14px;
+}
+
+.tab-btn.active {
+  font-weight: bold;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.muted {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #c0392b;
+  white-space: pre-wrap;
+}
+
+.box {
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 10px;
+  min-height: 3em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.metrics {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.metric strong {
+  display: block;
+  font-size: 1.1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+th,
+td {
+  border: 1px solid #999;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+code {
+  background: rgba(128, 128, 128, 0.2);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
