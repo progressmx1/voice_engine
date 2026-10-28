@@ -101,10 +101,14 @@ CASES = [
     # Times
     ("at 3:30 pm", "at three thirty P M"),
     ("at 10:00", "at ten o'clock"),
-    ("at 9:05 a.m.", "at nine oh five A M"),
+    ("at 9:05 a.m.", "at nine oh five A M."),
     ("at 14:45", "at fourteen forty-five"),
     ("9am", "nine A M"),
     ("7 PM", "seven P M"),
+    ("at 3:30 pm. Then", "at three thirty P M. Then"),
+    ("by 7 p.m. Then", "by seven P M. Then"),
+    ("by 7 p.m.", "by seven P M."),
+    ("7 p.m. or later", "seven P M or later"),
     # Percent, temperature, units
     ("up 12%", "up twelve percent"),
     ("-3.5%", "minus three point five percent"),

@@ -20,8 +20,20 @@ stt = ["faster-whisper>=1.1", "jiwer>=3.0"]
 tts = ["kokoro-onnx>=0.4", "sherpa-onnx>=1.10"]
 # Microphone and speaker (M3, M6)
 audio = ["sounddevice>=0.4.6"]
-# CUDA 12 libraries for faster-whisper on the GPU (M2)
-gpu = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
+# CUDA 12 libraries for faster-whisper (M2) and onnxruntime-gpu (M4) on the GPU
+gpu = [
+  "nvidia-cublas-cu12",
+  # 9.27 fails in onnxruntime-gpu 1.23 (built for CUDA 12.2): "Failed to initialize CUDNN
+  # Frontend" on Kokoro's Conv nodes. 9.8 works for both Kokoro and CTranslate2.
+  "nvidia-cudnn-cu12==9.8.0.87",
+  "nvidia-cuda-runtime-cu12",
+  "nvidia-cufft-cu12",
+  "nvidia-curand-cu12",
+]
+# Kokoro on the GPU. onnxruntime-gpu provides the same `onnxruntime` module as the CPU package
+# that kokoro-onnx and faster-whisper depend on, so it is not installed with the other extras:
+# the `gpu-tts` command uninstalls onnxruntime, then installs this with --no-deps (README.md).
+gpu-tts = ["onnxruntime-gpu==1.23.2"]
 dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]

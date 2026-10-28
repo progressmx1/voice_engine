@@ -346,11 +346,17 @@ def _times(text: str) -> str:
             spoken = f"{cardinal(h)} oh {ONES[mins]}"
         else:
             spoken = f"{cardinal(h)} {cardinal(mins)}"
-        return spoken + (f" {ap.upper()} M" if ap else "")
+        return spoken + (f" {ap.upper()} M" if ap else "") + _sentence_end(m)
 
     text = _sub(rf"\b(\d{{1,2}}):(\d{{2}})(?!:?\d)(?:\s?{AMPM})?", clock, text)
-    return _sub(rf"\b(\d{{1,2}})\s?{AMPM}",
-                lambda m: f"{cardinal(int(m.group(1)))} {m.group(2).upper()} M", text)
+    return _sub(rf"\b(\d{{1,2}})\s?{AMPM}", lambda m: (
+        f"{cardinal(int(m.group(1)))} {m.group(2).upper()} M{_sentence_end(m)}"), text)
+
+
+def _sentence_end(m: re.Match[str]) -> str:
+    """Keep a "p.m." dot that also ends the sentence (end of text, or a capital follows)."""
+    after = m.string[m.end():]
+    return "." if m.group().endswith(".") and re.match(r"\s*$|\s+[A-Z]", after) else ""
 
 
 def _special_numbers(text: str) -> str:
