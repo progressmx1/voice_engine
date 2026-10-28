@@ -21,9 +21,10 @@ off there as they are done.
 6. **Sample voices** (`../sample voices/*.mp3`) are ElevenLabs voice-library previews of real
    voice actors. Use them to **test speech-to-text** and as **listening and similarity targets**
    when choosing Edith's voice. **Never train on them, fine-tune on them or clone them.** The
-   actors haven't agreed to that and ElevenLabs' terms don't allow it. Edith's voices come from
-   openly licensed models (Kokoro, Apache-2.0). A cloned voice is only ever made from a recording
-   Progress has the rights to, such as his own.
+   actors haven't agreed to that and ElevenLabs' terms don't allow it. Edith's voice is trained
+   only on openly licensed data: public-domain or CC-BY speech (LJSpeech, LibriTTS-R) and openly
+   licensed starting weights (StyleTTS2 MIT, Kokoro Apache-2.0). A cloned voice is only ever made
+   from a recording Progress has the rights to, such as his own.
 7. **Local and private.** Nothing leaves the laptop at run time. A server, when there is one,
    binds to 127.0.0.1 only.
 8. **Code style:** Python 3.10, type hints, small modules with docstrings, no global state
@@ -40,14 +41,14 @@ CPU; everything must still work on CPU, just slower.
 
 - [x] Audio loading: any file (WAV, MP3, FLAC) to mono float32 at a chosen rate (`edith.audio`).
 - [x] Sample voices: discovery and metadata (`edith.samples`).
-- [ ] **Benchmark harness** `edith/bench.py`, run as `python -m edith.bench [stt|tts|all]`. Times
+- [x] **Benchmark harness** `edith/bench.py`, run as `python -m edith.bench [stt|tts|all]`. Times
   each stage with `time.perf_counter`, reports the real-time factor (RTF = processing time /
   audio duration) and latency, prints a table and writes `output/bench.json`. Test it with a
   dummy engine that sleeps.
 
 ### M2. Speech-to-text v1: fast offline transcription
 
-- [ ] `edith/stt.py`: `Transcriber(model="large-v3-turbo", device="auto", compute_type="auto")`
+- [x] `edith/stt.py`: `Transcriber(model="large-v3-turbo", device="auto", compute_type="auto")`
   using **faster-whisper** (CTranslate2). `device="auto"` uses CUDA when it works (float16),
   otherwise CPU (int8). Load once and reuse. `transcribe(audio | path, language="en") ->
   Transcript(text, segments[(start, end, text)], language, seconds, rtf)`.
@@ -76,42 +77,77 @@ CPU; everything must still work on CPU, just slower.
 - **Targets:** final text ≤ 300 ms after the end of speech on GPU (≤ 800 ms on CPU); first
   partial ≤ 700 ms after speech starts.
 
-### M4. Text-to-speech v1: Kokoro
+### TTS design: Edith's own engine
 
-- [ ] `edith/models.py`: downloads and checks the Kokoro-82M ONNX model and voices file (pinned
-  URLs and SHA-256) into `models/`.
-- [ ] `edith/tts.py`: `Synthesizer(voice="af_heart", speed=1.0, device="auto")` using
-  **kokoro-onnx** (onnxruntime; CUDA provider when available). `synthesize(text) -> (samples,
-  sample_rate)`, `save(text, path)`, `voices()`.
-- [ ] **Round trip:** a fixed set of 20 test sentences (numbers, names, units, questions) is
-  spoken by the synthesizer and transcribed by the M2 transcriber. WER ≤ 5%. This is why
-  speech-to-text comes first: it checks the voice automatically.
-- **Targets:** RTF ≤ 0.1 on CPU, ≤ 0.03 on GPU.
-- The installed onnxruntime is CPU-only, and Kokoro is fast on CPU. Only if CPU misses the
-  target, ask Progress to switch to `onnxruntime-gpu` (it replaces `onnxruntime`), then measure
-  again.
+Edith's text-to-speech is **our own engine**: we write every stage that decides how speech
+sounds (text normalisation, phonemes, prosody, chunking, joining, loudness and playback), and we
+fine-tune our own acoustic model for Edith's voice. Training a model from scratch on an 8 GB
+laptop GPU would take weeks and sound worse, so the acoustic model starts from openly licensed
+StyleTTS2-class weights. StyleTTS2 is the architecture behind Kokoro and scores close to human
+recordings in listening tests.
 
-### M5. Text-to-speech v2: Edith's voice
+```
+text -> normalise (text.py) -> phonemes -> chunker (clause boundaries, carried style)
+     -> acoustic model + vocoder (backend: Kokoro baseline, then Edith's fine-tune)
+     -> smoothing (tts/smooth.py: DC, edge fades, crossfades, loudness) -> gapless player
+```
 
-- [ ] `edith/similarity.py`: speaker embeddings (WeSpeaker ResNet34 ONNX via sherpa-onnx,
-  downloaded through `edith.models`) and cosine similarity between two clips.
-- [ ] `python -m edith.voice_search`: renders the same sentences with each Kokoro voice and with
-  blends of two or three voices (weighted averages of voice style vectors), and scores them
-  against the sample voices tagged "warm, friendly" (juliet, lauren, katie podcast). This only
-  measures similarity to choose among licensed voices; nothing is trained on the samples.
-  Writes `output/voice_search.md` with the top 5 and a WAV for each.
-- [ ] Save the chosen blend as `voices/edith.json` (weights). The default voice becomes
-  `"edith"`. Progress listens and approves (a task he ticks).
+**No jitter** is a measured requirement. Each source of jitter has a fix and a test:
 
-### M6. Text-to-speech v3: streaming and natural text
+| Jitter source                         | Fix                                                        | Test |
+| ------------------------------------- | ---------------------------------------------------------- | ---- |
+| Clicks at chunk joins                 | DC removal, short edge fades, equal-power crossfade        | largest sample jump at a join ≤ 1.5 × the largest jump away from joins (naive joins are > 5 ×) |
+| Loudness steps between chunks         | Per-chunk RMS matched to a running target with limited gain change | RMS of the 50 ms windows either side of a join within 3 dB |
+| Prosody resets at each chunk          | Split at clause boundaries only; carry the style vector and the previous clause as context | pitch at a join stays within the speaker's range |
+| Pitch and amplitude jitter from the vocoder | Measured on rendered speech; drives choosing and tuning the model | local F0 jitter ≤ 1.0 % and shimmer ≤ 3.5 % (normal human range) |
+| Playback stutter (buffer underruns)   | Ring buffer with ~100 ms pre-roll, synthesis ahead of playback | underrun counter stays 0 in a 60 s run |
 
-- [ ] `edith/text.py`: normalisation for speech (numbers, dates, times, currency, units,
+**Naturalness** is scored with UTMOS (an open predictor of human listening scores) on the
+20 round-trip sentences. Progress's listening approval is the final check.
+
+### M4. Text-to-speech v1: engine and baseline voice
+
+- [x] `edith/tts/smooth.py`: the anti-jitter layer (DC removal, edge fades, equal-power
+  crossfades, loudness matching) and the join metrics from the table above, with tests on
+  synthetic signals. Needs only numpy.
+- [x] `edith/text.py`: normalisation for speech (numbers, dates, times, currency, units,
   abbreviations, symbols) with thorough tests.
-- [ ] `edith/speak.py`: splits text into sentences and clauses and synthesizes chunk by chunk,
-  yielding audio as soon as the first chunk is ready; gapless playback with `sounddevice`
+- [ ] `edith/models.py`: downloads and checks model files (pinned URLs and SHA-256) into
+  `models/`.
+- [ ] `edith/tts/engine.py`: `Synthesizer(voice="edith", speed=1.0, device="auto")` with a
+  pluggable `Backend` (acoustic model + vocoder). `synthesize(text) -> (samples, rate)`,
+  `stream(text)` yields smoothed chunks, `save(text, path)`, `voices()`. First backend:
+  **Kokoro-82M ONNX** (kokoro-onnx) as the baseline, so the whole engine works before training.
+- [ ] **Round trip:** 20 fixed test sentences (numbers, names, units, questions) are spoken and
+  transcribed by the M2 transcriber. WER ≤ 5%.
+- [ ] `edith/quality.py`: UTMOS score, F0 jitter and shimmer, join metrics.
+  `python -m edith.quality` writes `output/quality.md`.
+- **Targets:** RTF ≤ 0.1 on CPU, ≤ 0.03 on GPU; all jitter tests pass; UTMOS recorded as the
+  baseline that Edith's own voice must beat.
+
+### M5. Text-to-speech v2: Edith's own voice
+
+- [ ] Data: **LJSpeech** (public domain, 24 h, one speaker) downloaded through `edith.models`,
+  or Progress's own recordings if he records them. `python -m edith.voice.prepare` resamples,
+  trims silence, drops clips whose Whisper transcript disagrees with the text (WER > 10%), and
+  writes phoneme manifests.
+- [ ] Fine-tune a StyleTTS2-class model (MIT training code, openly licensed starting weights) on
+  that data. Settings for 8 GB: mixed precision, batch 2, short max length, gradient
+  checkpointing. `python -m edith.voice.train` resumes from checkpoints in `models/`. Ask
+  Progress before long training runs; they keep the GPU busy for hours.
+- [ ] Export to ONNX as a second backend `edith` and run the M4 round trip and quality report on
+  it. It becomes the default only if WER ≤ 5%, the jitter metrics pass and its UTMOS is at least
+  the Kokoro baseline. Progress listens and approves (a task he ticks).
+- [ ] Optional: speaker-similarity check (WeSpeaker ONNX) against the "warm, friendly" sample
+  voices, used only to compare candidate checkpoints. Nothing is trained on the samples.
+
+### M6. Text-to-speech v3: streaming
+
+- [ ] `edith/speak.py`: synthesizes clause by clause and yields audio as soon as the first clause
+  is ready. Gapless playback with `sounddevice` through the ring buffer
   (`python -m edith.say "text"`).
-- **Targets:** first audio ≤ 150 ms after the text arrives on GPU (≤ 300 ms on CPU); no audible
-  gaps between chunks (checked by a test on chunk boundaries).
+- **Targets:** first audio ≤ 150 ms after the text arrives on GPU (≤ 300 ms on CPU); no
+  underruns; all join tests pass on streamed output.
 
 ### M7. Ready for Friday
 
@@ -123,3 +159,17 @@ CPU; everything must still work on CPU, just slower.
   random port.
 - [ ] Final benchmark table in `README.md`. Wiring Edith into Friday itself happens in Friday's
   own repository, not here.
+
+## Worker notes (this session)
+
+- Added `src/edith/wer.py` (jiwer WER, case/punctuation normalised) and
+  `src/edith/references.py` (`python -m edith.references` → draft `data/references.json`, every
+  entry marked `"reviewed": false` for Progress to check).
+- `edith.bench` now benchmarks **both** STT models (`large-v3-turbo` and `small.en`) when run as
+  `bench all`, and scores WER against `data/references.json` when it exists (new WER column).
+- Added `src/edith/bridge.py`: a line-delimited JSON stdin/stdout bridge for the UI.
+- Added `ui/` — an Electron test console (STT panel, benchmark panel, TTS placeholder) with
+  `contextIsolation: true`, `nodeIntegration: false`, a preload allow-list, and a main process that
+  spawns `python -m edith.bridge`. See `README.md` for launch steps.
+- Pending approvals: model download + `references` command, the `bench` run, and `npm install` in
+  `ui/`.

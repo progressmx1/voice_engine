@@ -9,7 +9,19 @@ this laptop (RTX 4070 or CPU). The step-by-step build plan, rules and targets ar
 - `src/edith/`: the engine package
   - `audio.py`: load any audio file as 16 kHz mono float32; write WAV
   - `samples.py`: the sample voices in `../sample voices` (testing and comparison only)
-- `tests/`: pytest tests (`conftest.py` provides the samples)
+  - `stt.py`: offline transcription with faster-whisper (GPU float16 / CPU int8)
+  - `references.py`: drafts `data/references.json` (large-v3, beam 5) for review
+  - `wer.py`: word error rate (jiwer, case/punctuation normalised)
+  - `text.py`: text normalisation for speech (numbers, currency, dates, times, units,
+    abbreviations, symbols, markdown)
+  - `tts/smooth.py`: anti-jitter layer for TTS (DC removal, fades, equal-power crossfades,
+    loudness matching) and join metrics
+  - `bench.py`: benchmark harness (RTF, latency, WER; writes `output/bench.json`)
+  - `bridge.py`: line-delimited JSON stdin/stdout bridge used by the UI
+- `tests/`: pytest tests (`conftest.py` provides the samples); the Electron bridge's Node tests run
+  from here too
+- `ui/`: Electron test console (STT, benchmark, TTS placeholder)
+- `data/references.json`: reviewed reference transcripts (committed; drafted by `edith.references`)
 - `models/`, `output/`: downloaded models and generated files (not committed)
 
 ## Commands (from projects.yaml)
@@ -21,14 +33,37 @@ this laptop (RTX 4070 or CPU). The step-by-step build plan, rules and targets ar
 | install | `.venv\Scripts\python -m pip install -e .[dev,stt,tts,audio,gpu]` | yes   |
 | bench   | `.venv\Scripts\python -m edith.bench all`                   | yes         |
 
+Note: `python -m edith.references` (draft reference transcripts) is not yet a named command in
+projects.yaml — it needs Progress to add it (or approve a one-off run) before the first draft run.
+
+## UI (Electron test console)
+
+Launch:
+
+    cd ui
+    npm install      # needs Progress's approval (downloads Electron)
+    npm start
+
+The main process spawns `python -m edith.bridge` from the project `.venv` and exposes a small
+allow-list to the renderer via a preload script (`contextIsolation` on, `nodeIntegration` off).
+
+- **STT panel:** transcribe an audio file or a live microphone recording
+  (model `large-v3-turbo`/`small.en`, device `auto`/`cpu`/`cuda`); shows transcript, segments,
+  RTF and latency.
+- **Benchmark panel:** reads `output/bench.json`.
+- **TTS panel:** placeholder (M4).
+
+Run the bridge's own unit tests with `node --test test/bridge.test.js` in `ui/` (also run by the
+project `test` command when Node is installed).
+
 ## Status
 
 | Milestone                          | State       | Measured                           |
 | ---------------------------------- | ----------- | ---------------------------------- |
-| M1 Foundations                     | in progress | audio loading and samples tested   |
-| M2 Speech-to-text v1               | not started |                                    |
+| M1 Foundations                     | done        | audio, samples and benchmark harness tested |
+| M2 Speech-to-text v1               | in progress | Transcriber + Transcript API tested; WER harness ready; references module ready (draft run pending approval); UI STT panel wired |
 | M3 Speech-to-text v2 (streaming)   | not started |                                    |
-| M4 Text-to-speech v1 (Kokoro)      | not started |                                    |
-| M5 Edith's voice                   | not started |                                    |
+| M4 Text-to-speech v1 (own engine) | in progress | anti-jitter layer tested (joins ≤ 1.5× interior jump, level steps ≤ 3 dB); text normaliser tested (211 cases) |
+| M5 Edith's own voice (fine-tune)  | not started |                                    |
 | M6 Streaming speech                | not started |                                    |
 | M7 Ready for Friday                | not started |                                    |
