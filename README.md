@@ -19,6 +19,8 @@ this laptop (RTX 4070 or CPU). The step-by-step build plan, rules and targets ar
     Kokoro-82M ONNX is the baseline backend
   - `roundtrip.py`: Edith speaks 20 fixed sentences, Whisper transcribes them, WER
     (`python -m edith.roundtrip` writes `output/roundtrip.md`)
+  - `quality.py`: jitter, shimmer, pitch spread and join checks against the sample voices
+    (`python -m edith.quality` writes `output/quality.md`)
   - `tts/smooth.py`: anti-jitter layer for TTS (DC removal, fades, equal-power crossfades,
     loudness matching) and join metrics
   - `bench.py`: benchmark harness (RTF, latency, WER; writes `output/bench.json`)
@@ -69,7 +71,7 @@ project `test` command when Node is installed).
 | M1 Foundations                     | done        | audio, samples and benchmark harness tested |
 | M2 Speech-to-text v1               | in progress | Transcriber + Transcript API tested; WER harness ready; references module ready (draft run pending approval); UI STT panel wired |
 | M3 Speech-to-text v2 (streaming)   | not started |                                    |
-| M4 Text-to-speech v1 (own engine) | in progress | anti-jitter layer tested (joins ≤ 1.5× interior jump, level steps ≤ 3 dB); text normaliser tested; Kokoro baseline speaking through the engine. GPU (onnxruntime-gpu, cuDNN 9.8): RTF 0.086-0.092, first audio 245 ms (targets 0.03 and 150 ms not met yet). CPU (6 threads): RTF 0.24-0.30, first audio 445 ms. Real-speech joins: jump ≤ 0.0005, chunk levels within 0.4 dB. Round trip (Kokoro af_heart → Whisper large-v3-turbo, GPU): WER 0.0% over 20 sentences / 212 words |
+| M4 Text-to-speech v1 (own engine) | in progress | anti-jitter layer tested (joins ≤ 1.5× interior jump, level steps ≤ 3 dB); text normaliser tested; Kokoro baseline speaking through the engine. GPU (onnxruntime-gpu, cuDNN 9.8): RTF 0.086-0.092, first audio 245 ms (targets 0.03 and 150 ms not met yet). CPU (6 threads): RTF 0.24-0.30, first audio 445 ms. Real-speech joins: jump ≤ 0.0005, chunk levels within 0.4 dB. Round trip (Kokoro af_heart → Whisper large-v3-turbo, GPU): WER 0.0% over 20 sentences / 212 words. Quality: jitter 1.93%, shimmer 7.35% (sample voices 1.90-2.38%, 6.97-10.20%), 19 joins click-free, chunk loudness within 0.9 dB; pitch spread 7.7 st vs 13-17 st for most sample voices (flatter). UTMOS not measured yet |
 | M5 Edith's own voice (fine-tune)  | not started |                                    |
 | M6 Streaming speech                | not started |                                    |
 | M7 Ready for Friday                | not started |                                    |

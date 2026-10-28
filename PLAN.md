@@ -99,7 +99,7 @@ text -> normalise (text.py) -> phonemes -> chunker (clause boundaries, carried s
 | Clicks at chunk joins                 | DC removal, short edge fades, equal-power crossfade        | largest sample jump at a join ≤ 1.5 × the largest jump away from joins (naive joins are > 5 ×) |
 | Loudness steps between chunks         | Per-chunk RMS matched to a running target with limited gain change | RMS of the 50 ms windows either side of a join within 3 dB |
 | Prosody resets at each chunk          | Split at clause boundaries only; carry the style vector and the previous clause as context | pitch at a join stays within the speaker's range |
-| Pitch and amplitude jitter from the vocoder | Measured on rendered speech; drives choosing and tuning the model | local F0 jitter ≤ 1.0 % and shimmer ≤ 3.5 % (normal human range) |
+| Pitch and amplitude jitter from the vocoder | Measured on rendered speech; drives choosing and tuning the model | paragraph jitter and shimmer (Praat, local) inside the range of the sample voices measured the same way. Clinical vowel norms (1.0 %, 3.5 %) don't apply to running speech: the samples read 1.9–2.4 % and 7–10 % |
 | Playback stutter (buffer underruns)   | Ring buffer with ~100 ms pre-roll, synthesis ahead of playback | underrun counter stays 0 in a 60 s run |
 
 **Naturalness** is scored with UTMOS (an open predictor of human listening scores) on the
@@ -120,8 +120,11 @@ text -> normalise (text.py) -> phonemes -> chunker (clause boundaries, carried s
   **Kokoro-82M ONNX** (kokoro-onnx) as the baseline, so the whole engine works before training.
 - [x] **Round trip:** 20 fixed test sentences (numbers, names, units, questions) are spoken and
   transcribed by the M2 transcriber. WER ≤ 5%.
-- [ ] `edith/quality.py`: UTMOS score, F0 jitter and shimmer, join metrics.
-  `python -m edith.quality` writes `output/quality.md`.
+- [x] `edith/quality.py`: jitter, shimmer, pitch spread and join metrics against the sample
+  voices. `python -m edith.quality` writes `output/quality.md`.
+- [ ] UTMOS naturalness score in `edith.quality` (needs PyTorch; ask Progress before installing).
+- [ ] Intonation: Edith's pitch spread is 7.7 semitones, most sample voices 13–17. Find what
+  widens it (voice choice, blends, speed, punctuation-aware prosody) and track it in the report.
 - **Targets:** RTF ≤ 0.1 on CPU, ≤ 0.03 on GPU; all jitter tests pass; UTMOS recorded as the
   baseline that Edith's own voice must beat.
 

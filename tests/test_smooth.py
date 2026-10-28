@@ -132,6 +132,15 @@ def test_streaming_holds_back_only_the_crossfade_tail() -> None:
     assert np.allclose(np.concatenate(out), smooth_join(chunks, RATE, crossfade_ms=10))
 
 
+def test_smoother_records_join_positions() -> None:
+    s = Smoother(RATE, crossfade_ms=10)
+    chunks = abrupt_chunks()
+    for c in chunks:
+        s.feed(c)
+    s.flush()
+    assert s.joins == join_points([len(c) for c in chunks], ms_to_samples(10, RATE))
+
+
 def test_empty_chunk_is_ignored() -> None:
     s = Smoother(RATE)
     assert s.feed(np.zeros(0, np.float32)).size == 0

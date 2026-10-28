@@ -25,12 +25,14 @@ import numpy as np
 from edith import models
 from edith.audio import save_wav
 from edith.text import normalize
-from edith.tts.smooth import Smoother
+from edith.tts.smooth import Smoother, fade_curve, ms_to_samples
 
 #: Voice blends saved as {"voice_name": weight, ...}; `voices/edith.json` is Edith's voice.
 VOICES_DIR = Path(__file__).resolve().parents[3] / "voices"
 #: Used for "edith" until `voices/edith.json` exists.
 FALLBACK_VOICE = "af_heart"
+#: Fade at the end of each chunk's speech before its pause.
+FADE_OUT_MS = 5.0
 
 Voice = str | Mapping[str, float]
 
@@ -216,6 +218,8 @@ class Synthesizer:
         self.sentence_pause = sentence_pause
         self.clause_pause = clause_pause
         self.crossfade_ms = crossfade_ms
+        #: Output sample indices of the chunk joins in the most recent utterance.
+        self.last_joins: list[int] = []
 
     @property
     def rate(self) -> int:
@@ -237,9 +241,14 @@ class Synthesizer:
             return
         prepared = self.backend.prepare(voice or self.voice, " ".join(c for c, _ in parts))
         smoother = Smoother(self.rate, crossfade_ms=self.crossfade_ms)
+        self.last_joins = smoother.joins
         for chunk, pause in parts:
             audio = self.backend.synthesize(chunk, prepared, self.speed)
             if pause:
+                # Speech meets silence here, inside the chunk: fade it so the cut can't click.
+                n = min(ms_to_samples(FADE_OUT_MS, self.rate), len(audio))
+                audio = audio.copy()
+                audio[len(audio) - n :] *= fade_curve(n)[::-1]
                 audio = np.concatenate([audio, np.zeros(int(pause * self.rate), np.float32)])
             out = smoother.feed(audio)
             if out.size:

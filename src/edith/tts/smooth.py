@@ -118,6 +118,9 @@ class Smoother:
         self._gain: float | None = None
         self._tail = np.zeros(0, dtype=np.float32)
         self._started = False
+        self._emitted = 0
+        #: Output sample index of the centre of every crossfade, for join metrics.
+        self.joins: list[int] = []
 
     def _chunk_gain(self, x: np.ndarray) -> float:
         """Gain that moves this chunk toward the target level without clipping."""
@@ -151,10 +154,13 @@ class Smoother:
             self._started = True
             joined = x
         else:
+            self.joins.append(self._emitted + min(self.overlap, len(self._tail), len(x)) // 2)
             joined = crossfade(self._tail, x, self.overlap)
         hold = min(self.overlap, len(joined))
         self._tail = joined[len(joined) - hold :].copy()
-        return joined[: len(joined) - hold]
+        out = joined[: len(joined) - hold]
+        self._emitted += len(out)
+        return out
 
     def flush(self) -> np.ndarray:
         """Return the held tail with a fade-out; the Smoother is then empty."""

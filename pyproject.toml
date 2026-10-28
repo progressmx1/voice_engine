@@ -17,7 +17,8 @@ dependencies = [
 # Speech-to-text (M2, M3)
 stt = ["faster-whisper>=1.1", "jiwer>=3.0"]
 # Text-to-speech (M4 to M6)
-tts = ["kokoro-onnx>=0.4", "sherpa-onnx>=1.10"]
+# praat-parselmouth: jitter, shimmer and pitch for edith.quality
+tts = ["kokoro-onnx>=0.4", "sherpa-onnx>=1.10", "praat-parselmouth>=0.4.7"]
 # Microphone and speaker (M3, M6)
 audio = ["sounddevice>=0.4.6"]
 # CUDA 12 libraries for faster-whisper (M2) and onnxruntime-gpu (M4) on the GPU
