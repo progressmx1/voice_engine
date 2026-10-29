@@ -11,10 +11,14 @@ the UI does not reload models on every request.
 TTS methods: ``tts_voices`` lists voices and presets; ``tts`` speaks text into
 ``output/ui-tts/NNN.wav`` and returns timings, the normalised chunks and voice
 measures; ``tts_check`` transcribes such a file with Whisper and scores it.
+
+``speak`` is for Friday: it returns the audio itself (16-bit PCM, base64) and writes no file,
+so Friday can play each sentence as soon as it is ready.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 import time
@@ -166,6 +170,38 @@ def _tts(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _speak(params: dict[str, Any]) -> dict[str, Any]:
+    """Speak text for Friday: mono 16-bit PCM, base64, plus timings. No file is written."""
+    from .tts.engine import Synthesizer
+
+    text = params.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("'text' is required")
+    if len(text) > MAX_TEXT:
+        raise ValueError(f"'text' is limited to {MAX_TEXT} characters")
+    speed = float(params.get("speed", 1.0))
+    intonation = float(params.get("intonation", 1.0))
+    if not (0.5 <= speed <= 2.0 and 0.5 <= intonation <= 2.0):
+        raise ValueError("'speed' and 'intonation' must be between 0.5 and 2.0")
+    synth = Synthesizer(
+        voice=_voice_param(params.get("voice") or "edith"),
+        speed=speed,
+        intonation=intonation,
+        backend=_tts_backend(str(params.get("device") or "auto")),
+    )
+    start = time.perf_counter()
+    parts = list(synth.stream(text))
+    audio = np.concatenate(parts) if parts else np.zeros(0, np.float32)
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
+    return {
+        "rate": synth.rate,
+        "pcm16": base64.b64encode(pcm.tobytes()).decode("ascii"),
+        "seconds": len(audio) / synth.rate,
+        "synth_seconds": time.perf_counter() - start,
+        "device": getattr(synth.backend, "device", ""),
+    }
+
+
 def _tts_check(params: dict[str, Any]) -> dict[str, Any]:
     from .audio import STT_RATE, load_audio
     from .roundtrip import score
@@ -198,6 +234,8 @@ def dispatch(request: dict[str, Any]) -> dict[str, Any]:
             result = _tts(params)
         elif method == "tts_check":
             result = _tts_check(params)
+        elif method == "speak":
+            result = _speak(params)
         else:
             return {
                 "id": request_id,

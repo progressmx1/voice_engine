@@ -177,3 +177,43 @@ def test_process_line_handles_bad_json() -> None:
 
 def test_process_line_returns_empty_for_blank_lines() -> None:
     assert bridge.process_line("   ") == ""
+
+
+class _FakeSynth:
+    """Stands in for Synthesizer: two chunks of a quiet ramp at 24 kHz."""
+
+    rate = 24_000
+
+    def __init__(self, voice, speed, intonation, backend) -> None:
+        self.voice, self.speed, self.intonation, self.backend = voice, speed, intonation, backend
+
+    def stream(self, text):
+        yield np.linspace(-0.5, 0.5, 2400, dtype=np.float32)
+        yield np.full(2400, 2.0, dtype=np.float32)  # out of range: must be clipped
+
+
+def test_speak_returns_pcm_for_friday(monkeypatch) -> None:
+    import base64
+
+    from edith.tts import engine
+
+    monkeypatch.setattr(engine, "Synthesizer", _FakeSynth)
+    monkeypatch.setattr(bridge, "_tts_backend", lambda device: object())
+    response = bridge.dispatch(
+        {"id": 7, "method": "speak", "params": {"text": "Hello.", "voice": "edith", "speed": 1.1}}
+    )
+    result = response["result"]
+    assert result["rate"] == 24_000
+    pcm = np.frombuffer(base64.b64decode(result["pcm16"]), dtype="<i2")
+    assert len(pcm) == 4800
+    assert pcm[0] == -16383 and pcm.max() == 32767
+    assert abs(result["seconds"] - 0.2) < 1e-9
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{}, {"text": "  "}, {"text": "x" * 2001}, {"text": "hi", "speed": 5}, {"text": "hi", "intonation": 0}],
+)
+def test_speak_rejects_bad_requests(params) -> None:
+    response = bridge.dispatch({"id": 8, "method": "speak", "params": params})
+    assert "error" in response
