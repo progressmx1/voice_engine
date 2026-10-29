@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('edith', {
   pickAudioFile: () => ipcRenderer.invoke('edith:pickAudioFile'),
   saveRecording: (bytes) => ipcRenderer.invoke('edith:saveRecording', bytes),
   readBench: () => ipcRenderer.invoke('edith:readBench'),
+  ttsVoices: (payload) => ipcRenderer.invoke('edith:ttsVoices', payload),
+  tts: (payload) => ipcRenderer.invoke('edith:tts', payload),
+  ttsCheck: (payload) => ipcRenderer.invoke('edith:ttsCheck', payload),
 });

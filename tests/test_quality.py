@@ -79,16 +79,23 @@ def test_in_range() -> None:
     assert in_range(2.0, [1.0, 3.0]) and not in_range(3.5, [1.0, 3.0]) and not in_range(1.0, [])
 
 
-def measures(jitter: float, shimmer: float) -> VoiceMeasures:
-    return VoiceMeasures(jitter, shimmer, 200.0, 10.0)
+def measures(jitter: float, shimmer: float, spread: float = 10.0) -> VoiceMeasures:
+    return VoiceMeasures(jitter, shimmer, 200.0, spread)
 
 
-def test_report_passes_only_inside_human_range_with_clean_joins() -> None:
-    humans = {"a": measures(0.019, 0.07), "b": measures(0.024, 0.10)}
+def test_report_judges_wobble_as_ceiling_spread_as_range_and_joins() -> None:
+    humans = {"a": measures(0.019, 0.07, 7.0), "b": measures(0.024, 0.10, 15.0)}
     good = Report(measures(0.02, 0.08), [measures(0.02, 0.08)], JoinMeasures(3, 0.5, 1.0), humans)
     assert good.ok and "Overall: **pass**" in good.markdown()
-    robotic = Report(measures(0.005, 0.08), good.sentences, good.joins, humans)
-    assert not robotic.jitter_ok and not robotic.ok
+    steadier = Report(measures(0.015, 0.06), good.sentences, good.joins, humans)
+    assert steadier.ok  # less wobble than people is fine
+    wobbly = Report(measures(0.03, 0.08), good.sentences, good.joins, humans)
+    assert not wobbly.jitter_ok and not wobbly.ok
+    shaky = Report(measures(0.02, 0.12), good.sentences, good.joins, humans)
+    assert not shaky.shimmer_ok and not shaky.ok
+    flat = Report(measures(0.02, 0.08, 5.0), good.sentences, good.joins, humans)
+    singsong = Report(measures(0.02, 0.08, 20.0), good.sentences, good.joins, humans)
+    assert not flat.spread_ok and not singsong.spread_ok and not flat.ok
     clicky = Report(good.paragraph, good.sentences, JoinMeasures(3, 4.0, 1.0), humans)
     assert not clicky.ok and "FAIL" in clicky.markdown()
 

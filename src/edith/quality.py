@@ -6,6 +6,10 @@ with Praat (parselmouth), the standard tool for them. Clinical norms (jitter ≤
 is judged against the sample voices measured the same way. They are real human speech used
 only as a measuring stick, never for training (PLAN.md rule 6).
 
+Jitter and shimmer are ceilings: Edith may wobble less than the people, never more. Pitch
+spread (how far intonation moves) must fall inside the people's range: a flat voice sounds
+robotic, an overdone one sing-song.
+
 Joins are checked on a long paragraph: the largest sample jump near any join must stay within
 1.5 times the largest jump elsewhere (no clicks), and the speech level of every chunk must stay
 within 3 dB of the others (no loudness steps).
@@ -108,6 +112,10 @@ def in_range(value: float, values: list[float]) -> bool:
     return bool(values) and min(values) <= value <= max(values)
 
 
+def at_most_human(value: float, values: list[float]) -> bool:
+    return bool(values) and value <= max(values)
+
+
 @dataclass(frozen=True)
 class Report:
     paragraph: VoiceMeasures
@@ -118,15 +126,19 @@ class Report:
 
     @property
     def jitter_ok(self) -> bool:
-        return in_range(self.paragraph.jitter, [h.jitter for h in self.humans.values()])
+        return at_most_human(self.paragraph.jitter, [h.jitter for h in self.humans.values()])
 
     @property
     def shimmer_ok(self) -> bool:
-        return in_range(self.paragraph.shimmer, [h.shimmer for h in self.humans.values()])
+        return at_most_human(self.paragraph.shimmer, [h.shimmer for h in self.humans.values()])
+
+    @property
+    def spread_ok(self) -> bool:
+        return in_range(self.paragraph.f0_spread, [h.f0_spread for h in self.humans.values()])
 
     @property
     def ok(self) -> bool:
-        return self.jitter_ok and self.shimmer_ok and self.joins.ok
+        return self.jitter_ok and self.shimmer_ok and self.spread_ok and self.joins.ok
 
     def markdown(self) -> str:
         def row(name: str, m: VoiceMeasures) -> str:
@@ -134,7 +146,9 @@ class Report:
                     f"| {m.f0_spread:.1f} st |")
 
         h = list(self.humans.values())
-        rng = (lambda xs: f"{min(xs):.2%} to {max(xs):.2%}") if h else (lambda xs: "n/a")
+        top = (lambda xs: f"≤ {max(xs):.2%} (human max)") if h else (lambda xs: "n/a")
+        st = [x.f0_spread for x in h]
+        st_range = f"{min(st):.1f} to {max(st):.1f} st (human range)" if h else "n/a"
         mark = {True: "pass", False: "FAIL"}
         jit = [m.jitter for m in self.sentences]
         shim = [m.shimmer for m in self.sentences]
@@ -145,10 +159,12 @@ class Report:
             "",
             "| Check | Edith | Target | Result |",
             "| ----- | ----- | ------ | ------ |",
-            f"| Jitter, paragraph | {self.paragraph.jitter:.2%} | human range "
-            f"{rng([x.jitter for x in h])} | {mark[self.jitter_ok]} |",
-            f"| Shimmer, paragraph | {self.paragraph.shimmer:.2%} | human range "
-            f"{rng([x.shimmer for x in h])} | {mark[self.shimmer_ok]} |",
+            f"| Jitter, paragraph | {self.paragraph.jitter:.2%} | {top([x.jitter for x in h])} "
+            f"| {mark[self.jitter_ok]} |",
+            f"| Shimmer, paragraph | {self.paragraph.shimmer:.2%} | "
+            f"{top([x.shimmer for x in h])} | {mark[self.shimmer_ok]} |",
+            f"| Pitch spread (intonation), paragraph | {self.paragraph.f0_spread:.1f} st | "
+            f"{st_range} | {mark[self.spread_ok]} |",
             f"| Click at joins ({self.joins.joins} joins) | {self.joins.jump_ratio:.2f}× | "
             f"≤ {MAX_JOIN_RATIO}× largest jump elsewhere | "
             f"{mark[self.joins.jump_ratio <= MAX_JOIN_RATIO]} |",
@@ -193,12 +209,17 @@ def measure(synth: object, sentences: list[str] = SENTENCES, wav: Path | None = 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m edith.quality", description=__doc__.split("\n")[0])
     parser.add_argument("--voice", default="edith")
+    parser.add_argument("--intonation", type=float, default=None,
+                        help="override the engine's intonation factor")
     parser.add_argument("--out", type=Path, default=Path("output"))
     args = parser.parse_args(argv)
 
     from edith.tts.engine import Synthesizer
 
-    report = measure(Synthesizer(voice=args.voice), wav=args.out / "quality_paragraph.wav")
+    synth = Synthesizer(voice=args.voice)
+    if args.intonation is not None:
+        synth.intonation = args.intonation
+    report = measure(synth, wav=args.out / "quality_paragraph.wav")
     text = report.markdown()
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "quality.md").write_text(text, encoding="utf-8")

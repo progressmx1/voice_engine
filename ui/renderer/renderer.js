@@ -210,6 +210,240 @@ $('stt-run').addEventListener('click', async () => {
   }
 });
 
+// ---- TTS ------------------------------------------------------------------
+
+const tts = {
+  presets: [],
+  clips: [], // { n, label, intonation, speed, result, url }
+  current: null,
+  busy: false,
+};
+
+function setTtsError(message) {
+  const el = $('tts-error');
+  el.textContent = message || '';
+  el.hidden = !message;
+}
+
+function option(value, text) {
+  const opt = document.createElement('option');
+  opt.value = value;
+  opt.textContent = text;
+  return opt;
+}
+
+function showSliderValues() {
+  $('tts-mix-value').textContent = `${$('tts-mix').value}%`;
+  $('tts-intonation-value').textContent = `${Number($('tts-intonation').value).toFixed(2)}×`;
+  $('tts-speed-value').textContent = `${Number($('tts-speed').value).toFixed(2)}×`;
+  const blending = $('tts-voice-b').value !== '';
+  $('tts-mix').disabled = !blending;
+  $('tts-voice-b').disabled = $('tts-voice-a').value === 'edith';
+}
+
+// The voice sent to the engine: a name, or a blend {a: 1 - mix, b: mix}.
+function currentVoice() {
+  const a = $('tts-voice-a').value;
+  const b = $('tts-voice-b').value;
+  if (!b || a === 'edith' || a === b) return a;
+  const mix = Number($('tts-mix').value) / 100;
+  return { [a]: Number((1 - mix).toFixed(2)), [b]: Number(mix.toFixed(2)) };
+}
+
+function voiceLabel(voice) {
+  if (typeof voice === 'string') return voice;
+  return Object.entries(voice)
+    .map(([name, w]) => `${Math.round(w * 100)}% ${name}`)
+    .join(' + ');
+}
+
+function applyPreset(preset) {
+  const voice = preset.voice;
+  if (typeof voice === 'string') {
+    $('tts-voice-a').value = voice;
+    $('tts-voice-b').value = '';
+  } else {
+    const [[a, wa], [b]] = Object.entries(voice);
+    $('tts-voice-a').value = a;
+    $('tts-voice-b').value = b;
+    $('tts-mix').value = String(Math.round((1 - wa) * 100));
+  }
+  $('tts-intonation').value = String(preset.intonation);
+  showSliderValues();
+}
+
+async function loadTtsVoices() {
+  try {
+    const res = await window.edith.ttsVoices({ device: $('tts-device').value });
+    const a = $('tts-voice-a');
+    const b = $('tts-voice-b');
+    a.innerHTML = '';
+    res.voices.forEach((v) => a.appendChild(option(v, v)));
+    res.voices
+      .filter((v) => v !== 'edith')
+      .forEach((v) => b.appendChild(option(v, v)));
+    tts.presets = res.presets;
+    res.presets.forEach((p, i) => $('tts-preset').appendChild(option(String(i), p.name)));
+    if (!$('tts-text').value) $('tts-text').value = res.default_text;
+    $('tts-preset').value = '0';
+    applyPreset(res.presets[0]);
+    $('tts-speak').disabled = false;
+  } catch (err) {
+    setTtsError(`could not load voices: ${err.message}`);
+  }
+}
+
+function metric(label, value) {
+  const div = document.createElement('div');
+  div.className = 'metric';
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+  const small = document.createElement('small');
+  small.textContent = label;
+  div.append(strong, small);
+  return div;
+}
+
+function showClip(clip) {
+  const r = clip.result;
+  tts.current = clip;
+  $('tts-audio').src = clip.url;
+  $('tts-spoken').textContent = r.spoken || '—';
+  $('tts-heard').textContent = clip.heard || '—';
+  const m = r.measures;
+  const items = [
+    ['First audio', `${r.first_audio_ms.toFixed(0)} ms`],
+    ['RTF', r.rtf.toFixed(3)],
+    ['Length', `${r.seconds.toFixed(1)} s`],
+    ['Device', r.device],
+    ['Chunks', String(r.chunks.length)],
+  ];
+  if (m) {
+    items.push(
+      ['Pitch spread', `${m.f0_spread.toFixed(1)} st`],
+      ['Median pitch', `${m.f0_median.toFixed(0)} Hz`],
+      ['Jitter', `${(m.jitter * 100).toFixed(2)}%`],
+      ['Shimmer', `${(m.shimmer * 100).toFixed(2)}%`],
+    );
+  }
+  if (clip.wer != null) items.push(['Whisper WER', `${(clip.wer * 100).toFixed(1)}%`]);
+  $('tts-metrics').innerHTML = '';
+  items.forEach(([label, value]) => $('tts-metrics').appendChild(metric(label, value)));
+  $('tts-check').disabled = tts.busy;
+}
+
+function addHistoryRow(clip) {
+  const r = clip.result;
+  const tr = document.createElement('tr');
+  [
+    String(clip.n),
+    clip.label,
+    `${clip.intonation.toFixed(2)}×`,
+    `${clip.speed.toFixed(2)}×`,
+    `${r.seconds.toFixed(1)} s`,
+    r.measures ? `${r.measures.f0_spread.toFixed(1)} st` : '—',
+    `${r.first_audio_ms.toFixed(0)} ms`,
+  ].forEach((text) => {
+    const td = document.createElement('td');
+    td.textContent = text;
+    tr.appendChild(td);
+  });
+  const td = document.createElement('td');
+  const play = document.createElement('button');
+  play.type = 'button';
+  play.textContent = 'Play';
+  play.addEventListener('click', () => {
+    showClip(clip);
+    $('tts-audio').play();
+  });
+  td.appendChild(play);
+  tr.appendChild(td);
+  $('tts-history').querySelector('tbody').prepend(tr);
+}
+
+function setTtsBusy(busy, label) {
+  tts.busy = busy;
+  $('tts-speak').disabled = busy;
+  $('tts-check').disabled = busy || !tts.current;
+  $('tts-speak').textContent = busy && label === 'speak' ? 'Speaking…' : 'Speak';
+  $('tts-check').textContent = busy && label === 'check' ? 'Listening…' : 'Check with Whisper';
+}
+
+$('tts-speak').addEventListener('click', async () => {
+  setTtsError('');
+  const text = $('tts-text').value.trim();
+  if (!text) {
+    setTtsError('Type something for Edith to say.');
+    return;
+  }
+  const voice = currentVoice();
+  const intonation = Number($('tts-intonation').value);
+  const speed = Number($('tts-speed').value);
+  setTtsBusy(true, 'speak');
+  try {
+    const result = await window.edith.tts({
+      text,
+      voice,
+      intonation,
+      speed,
+      device: $('tts-device').value,
+    });
+    const url = URL.createObjectURL(new Blob([result.wav], { type: 'audio/wav' }));
+    const clip = {
+      n: tts.clips.length + 1,
+      label: voiceLabel(voice),
+      intonation,
+      speed,
+      result,
+      url,
+      heard: null,
+      wer: null,
+    };
+    tts.clips.push(clip);
+    addHistoryRow(clip);
+    showClip(clip);
+    $('tts-audio').play();
+  } catch (err) {
+    setTtsError(err.message);
+  } finally {
+    setTtsBusy(false);
+  }
+});
+
+$('tts-check').addEventListener('click', async () => {
+  const clip = tts.current;
+  if (!clip) return;
+  setTtsError('');
+  setTtsBusy(true, 'check');
+  $('tts-heard').textContent = 'listening… (the first check loads Whisper, about a minute)';
+  try {
+    const res = await window.edith.ttsCheck({
+      path: clip.result.path,
+      spoken: clip.result.spoken,
+      device: $('tts-device').value,
+    });
+    clip.heard = res.heard;
+    clip.wer = res.wer;
+    showClip(clip);
+  } catch (err) {
+    setTtsError(err.message);
+    $('tts-heard').textContent = '—';
+  } finally {
+    setTtsBusy(false);
+  }
+});
+
+$('tts-preset').addEventListener('change', (e) => {
+  if (e.target.value !== '') applyPreset(tts.presets[Number(e.target.value)]);
+});
+
+['tts-voice-a', 'tts-voice-b', 'tts-mix', 'tts-intonation', 'tts-speed'].forEach((id) => {
+  $(id).addEventListener('input', () => {
+    $('tts-preset').value = '';
+    showSliderValues();
+  });
+});
+
 // ---- benchmark ------------------------------------------------------------
 
 async function renderBench() {
@@ -276,3 +510,4 @@ $('bench-refresh').addEventListener('click', renderBench);
 updateStatus();
 updateSttControls();
 renderBench();
+loadTtsVoices();

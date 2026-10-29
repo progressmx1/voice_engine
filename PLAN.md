@@ -123,8 +123,12 @@ text -> normalise (text.py) -> phonemes -> chunker (clause boundaries, carried s
 - [x] `edith/quality.py`: jitter, shimmer, pitch spread and join metrics against the sample
   voices. `python -m edith.quality` writes `output/quality.md`.
 - [ ] UTMOS naturalness score in `edith.quality` (needs PyTorch; ask Progress before installing).
-- [ ] Intonation: Edith's pitch spread is 7.7 semitones, most sample voices 13–17. Find what
-  widens it (voice choice, blends, speed, punctuation-aware prosody) and track it in the report.
+- [ ] Intonation: Edith's pitch spread was 7.7 semitones, most sample voices 13–17. Speed and
+  Kokoro's style row barely change it; voice choice and blends reach about 9–10. The engine now
+  has `intonation` (`edith/tts/prosody.py`: Praat PSOLA pitch-range expansion, RTF 0.015, no WER
+  cost); heart+lily at 1.3 gives 11.8 st, at 1.5 13.6 st. Candidates A–E are presets in the UI.
+  Progress listens and picks; the pick becomes `voices/edith.json` and the default intonation.
+- [x] Fixed style row (150) so short and long replies keep the same pace.
 - **Targets:** RTF ≤ 0.1 on CPU, ≤ 0.03 on GPU; all jitter tests pass; UTMOS recorded as the
   baseline that Edith's own voice must beat.
 

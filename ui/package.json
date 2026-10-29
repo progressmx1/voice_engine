@@ -2,7 +2,7 @@
   "name": "edith-ui",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron UI to test Edith's STT engine and benchmarks.",
+  "description": "Electron UI to test Edith: text-to-speech, speech-to-text and benchmarks.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

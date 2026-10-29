@@ -96,6 +96,41 @@ ipcMain.handle('edith:saveRecording', (_event, bytes) => {
   return file;
 });
 
+// ---- TTS --------------------------------------------------------------------
+
+function ttsDir() {
+  return path.join(projectRoot(), 'output', 'ui-tts');
+}
+
+// Only clips the bridge wrote into output/ui-tts may be read or checked.
+function isTtsClip(file) {
+  return typeof file === 'string' && path.dirname(path.resolve(file)) === path.resolve(ttsDir());
+}
+
+ipcMain.handle('edith:ttsVoices', (_event, payload) =>
+  bridge.request('tts_voices', { device: (payload && payload.device) || 'auto' }),
+);
+
+ipcMain.handle('edith:tts', async (_event, payload) => {
+  const { text, voice, speed, intonation, device } = payload || {};
+  const result = await bridge.request('tts', {
+    text,
+    voice,
+    speed,
+    intonation,
+    device: device || 'auto',
+  });
+  if (!isTtsClip(result.path)) throw new Error('unexpected clip location');
+  // The sandboxed renderer can't read files; hand it the WAV bytes to play.
+  return { ...result, wav: new Uint8Array(fs.readFileSync(result.path)) };
+});
+
+ipcMain.handle('edith:ttsCheck', (_event, payload) => {
+  const { path: clip, spoken, device } = payload || {};
+  if (!isTtsClip(clip)) throw new Error('can only check clips made by this UI');
+  return bridge.request('tts_check', { path: clip, spoken, device: device || 'auto' });
+});
+
 ipcMain.handle('edith:readBench', () => {
   const file = path.join(projectRoot(), 'output', 'bench.json');
   if (!fs.existsSync(file)) return null;

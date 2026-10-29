@@ -46,20 +46,37 @@ projects.yaml — it needs Progress to add it (or approve a one-off run) before 
 
 ## UI (Electron test console)
 
-Launch:
+First time only (installs Electron into `ui/node_modules`, about 100 MB):
 
     cd ui
-    npm install      # needs Progress's approval (downloads Electron)
+    npm install
+
+Then, every time:
+
+    cd ui
     npm start
 
-The main process spawns `python -m edith.bridge` from the project `.venv` and exposes a small
-allow-list to the renderer via a preload script (`contextIsolation` on, `nodeIntegration` off).
+It needs the project `.venv` with the `tts`, `stt` and `gpu` extras and the model files in
+`models/` (`python -m edith.models` for Kokoro; Whisper downloads on its first check). The main
+process spawns `python -m edith.bridge` from `.venv` and exposes a small allow-list to the
+renderer via a preload script (`contextIsolation` and `sandbox` on, `nodeIntegration` off).
 
-- **STT panel:** transcribe an audio file or a live microphone recording
+- **TTS tab** (opens first):
+  - Type text (numbers, times, money and so on are normalised; the box below the player shows
+    exactly what Edith said).
+  - Pick a **preset** (A to E: the intonation candidates) or set it yourself: **voice**, an
+    optional second voice to **blend with** and the **mix**, **intonation** (1.0 = Kokoro as
+    is, higher = livelier pitch), **speed** and **device**.
+  - **Speak** plays the clip and shows first-audio latency, RTF, pitch spread, jitter and
+    shimmer, with the human reference ranges underneath.
+  - **Check with Whisper** transcribes the clip and shows what was heard and the WER (the
+    first check loads Whisper, about a minute).
+  - Every clip stays in the **Clips** table with its settings; press Play to compare.
+  - Clips are written to `output/ui-tts/`.
+- **STT tab:** transcribe an audio file or a live microphone recording
   (model `large-v3-turbo`/`small.en`, device `auto`/`cpu`/`cuda`); shows transcript, segments,
   RTF and latency.
-- **Benchmark panel:** reads `output/bench.json`.
-- **TTS panel:** placeholder (M4).
+- **Benchmark tab:** reads `output/bench.json`.
 
 Run the bridge's own unit tests with `node --test test/bridge.test.js` in `ui/` (also run by the
 project `test` command when Node is installed).

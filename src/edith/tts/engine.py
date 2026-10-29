@@ -1,14 +1,14 @@
 """Edith's text-to-speech engine: text in, smooth speech out.
 
     text -> normalize (edith.text) -> clause chunks -> backend (acoustic model + vocoder)
-         -> pauses -> Smoother (edith.tts.smooth) -> audio
+         -> intonation (edith.tts.prosody) -> pauses -> Smoother (edith.tts.smooth) -> audio
 
 The backend is pluggable. `KokoroBackend` (Kokoro-82M ONNX) is the baseline voice until Edith's
 own fine-tuned model exists (PLAN.md M5). The engine owns everything else: what gets said, where
-it is split, how long the pauses are and how the chunks are joined.
+it is split, how far the pitch moves, how long the pauses are and how the chunks are joined.
 
-To keep the timbre steady across chunks, Kokoro's per-length style vector is locked to one row
-for the whole utterance (`lock_style`), instead of changing with every chunk's length.
+To keep timbre and pace steady across chunks and replies, Kokoro's per-length style vector is
+locked to one fixed row (`STYLE_ROW`) instead of changing with each input's length.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import numpy as np
 from edith import models
 from edith.audio import save_wav
 from edith.text import normalize
+from edith.tts.prosody import expand_pitch, reference_pitch
 from edith.tts.smooth import Smoother, fade_curve, ms_to_samples
 
 #: Voice blends saved as {"voice_name": weight, ...}; `voices/edith.json` is Edith's voice.
@@ -33,6 +34,11 @@ VOICES_DIR = Path(__file__).resolve().parents[3] / "voices"
 FALLBACK_VOICE = "af_heart"
 #: Fade at the end of each chunk's speech before its pause.
 FADE_OUT_MS = 5.0
+#: Spoken once per voice to find the pitch that intonation is scaled around.
+CALIBRATION_TEXT = (
+    "Good morning. I checked your calendar, and you have three meetings today. "
+    "The first one starts at nine thirty. Would you like a reminder?"
+)
 
 Voice = str | Mapping[str, float]
 
@@ -123,6 +129,10 @@ def lock_style(style: np.ndarray, length: int) -> np.ndarray:
 # --- Kokoro backend -------------------------------------------------------------------------
 
 _KOKORO_CACHE: dict[tuple[str, str, tuple[str, ...]], Any] = {}
+#: Kokoro's style rows are tuned per input length and set the pace: row 20 reads a test paragraph
+#: in 56 s, row 400 in 84 s. One fixed row keeps short and long replies at the same pace (about
+#: 157 words a minute) and the timbre steady; intonation barely changes between rows.
+STYLE_ROW = 150
 #: onnxruntime threads for Kokoro on CPU; more threads than this get slower, not faster.
 CPU_THREADS = 6
 
@@ -184,8 +194,7 @@ class KokoroBackend:
                      else self.kokoro.get_voice_style(voice))
         else:
             style = blend(self.kokoro.voices, voice)
-        # Characters approximate phonemes closely enough to pick the style row.
-        return lock_style(style, len(utterance)) if self.locked else style
+        return lock_style(style, STYLE_ROW) if self.locked else style
 
     def synthesize(self, text: str, prepared: np.ndarray, speed: float) -> np.ndarray:
         samples, _ = self.kokoro.create(text, voice=prepared, speed=speed, lang="en-us", trim=True)
@@ -208,9 +217,17 @@ class Synthesizer:
         sentence_pause: float = 0.25,
         clause_pause: float = 0.1,
         crossfade_ms: float = 10.0,
+        intonation: float = 1.0,
     ) -> None:
+        """
+        Args:
+            intonation: how far the pitch moves compared with the backend's own reading
+                (1.0 = unchanged, 1.3 = rises and falls 30% wider on a log scale).
+        """
         if not 0.5 <= speed <= 2.0:
             raise ValueError(f"speed must be between 0.5 and 2.0, got {speed}")
+        if not 0.5 <= intonation <= 2.0:
+            raise ValueError(f"intonation must be between 0.5 and 2.0, got {intonation}")
         self.voice = voice
         self.speed = speed
         self.backend: Backend = backend or KokoroBackend(device=device)
@@ -218,6 +235,8 @@ class Synthesizer:
         self.sentence_pause = sentence_pause
         self.clause_pause = clause_pause
         self.crossfade_ms = crossfade_ms
+        self.intonation = intonation
+        self._reference_hz: dict[str, float] = {}
         #: Output sample indices of the chunk joins in the most recent utterance.
         self.last_joins: list[int] = []
 
@@ -234,16 +253,29 @@ class Synthesizer:
         """The normalised chunks and pauses `text` will be spoken as."""
         return split_chunks(normalize(text), self.max_chars, self.sentence_pause, self.clause_pause)
 
+    def reference_hz(self, voice: Voice | None = None) -> float:
+        """The pitch a voice's intonation is scaled around (its median on a fixed passage)."""
+        voice = voice or self.voice
+        key = voice if isinstance(voice, str) else json.dumps(dict(voice), sort_keys=True)
+        if key not in self._reference_hz:
+            prepared = self.backend.prepare(voice, CALIBRATION_TEXT)
+            audio = self.backend.synthesize(CALIBRATION_TEXT, prepared, self.speed)
+            self._reference_hz[key] = reference_pitch(audio, self.rate)
+        return self._reference_hz[key]
+
     def stream(self, text: str, voice: Voice | None = None) -> Iterator[np.ndarray]:
         """Yield smoothed audio as each chunk is synthesized; together they are gapless."""
         parts = self.chunks(text)
         if not parts:
             return
-        prepared = self.backend.prepare(voice or self.voice, " ".join(c for c, _ in parts))
+        voice = voice or self.voice
+        prepared = self.backend.prepare(voice, " ".join(c for c, _ in parts))
+        ref_hz = self.reference_hz(voice) if self.intonation != 1.0 else 0.0
         smoother = Smoother(self.rate, crossfade_ms=self.crossfade_ms)
         self.last_joins = smoother.joins
         for chunk, pause in parts:
             audio = self.backend.synthesize(chunk, prepared, self.speed)
+            audio = expand_pitch(audio, self.rate, self.intonation, ref_hz)
             if pause:
                 # Speech meets silence here, inside the chunk: fade it so the cut can't click.
                 n = min(ms_to_samples(FADE_OUT_MS, self.rate), len(audio))

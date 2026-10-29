@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; media-src blob:"
     />
     <title>Edith</title>
     <link rel="stylesheet" href="styles.css" />
@@ -16,13 +16,13 @@
     </header>
 
     <nav>
-      <button data-tab="stt" class="tab-btn active">STT</button>
+      <button data-tab="tts" class="tab-btn active">TTS</button>
+      <button data-tab="stt" class="tab-btn">STT</button>
       <button data-tab="bench" class="tab-btn">Benchmark</button>
-      <button data-tab="tts" class="tab-btn">TTS</button>
     </nav>
 
     <main>
-      <section id="tab-stt" class="tab">
+      <section id="tab-stt" class="tab" hidden>
         <h2>Speech-to-text</h2>
 
         <div class="row wrap">
@@ -82,11 +82,82 @@
         <div id="bench-content" class="muted">No benchmark data yet.</div>
       </section>
 
-      <section id="tab-tts" class="tab" hidden>
+      <section id="tab-tts" class="tab">
         <h2>Text-to-speech</h2>
+
+        <label class="full">
+          Text
+          <textarea id="tts-text" rows="5"></textarea>
+        </label>
+
+        <div class="row wrap controls">
+          <label>
+            Preset
+            <select id="tts-preset"><option value="">Custom</option></select>
+          </label>
+          <label>
+            Voice
+            <select id="tts-voice-a"></select>
+          </label>
+          <label>
+            Blend with
+            <select id="tts-voice-b"><option value="">(none)</option></select>
+          </label>
+          <label>
+            Mix <span id="tts-mix-value" class="value">50%</span>
+            <input id="tts-mix" type="range" min="5" max="95" step="5" value="50" />
+          </label>
+        </div>
+
+        <div class="row wrap controls">
+          <label>
+            Intonation <span id="tts-intonation-value" class="value">1.00×</span>
+            <input id="tts-intonation" type="range" min="0.8" max="1.8" step="0.05" value="1" />
+          </label>
+          <label>
+            Speed <span id="tts-speed-value" class="value">1.00×</span>
+            <input id="tts-speed" type="range" min="0.7" max="1.3" step="0.05" value="1" />
+          </label>
+          <label>
+            Device
+            <select id="tts-device">
+              <option value="auto">auto</option>
+              <option value="cuda">cuda</option>
+              <option value="cpu">cpu</option>
+            </select>
+          </label>
+          <button id="tts-speak" type="button" class="primary" disabled>Speak</button>
+          <button id="tts-check" type="button" disabled>Check with Whisper</button>
+        </div>
+
+        <div id="tts-error" class="error" hidden></div>
+        <audio id="tts-audio" controls></audio>
+
+        <h3>Metrics</h3>
+        <div id="tts-metrics" class="metrics">—</div>
         <p class="muted">
-          TTS is not implemented yet (M4 milestone). This panel is a placeholder.
+          Human reference (sample voices, running speech): pitch spread 6.5–17 st, jitter up to
+          2.4%, shimmer up to 10.2%. Lower jitter/shimmer is steadier; higher pitch spread is
+          livelier intonation.
         </p>
+
+        <h3>What Edith said (after normalisation)</h3>
+        <pre id="tts-spoken" class="box">—</pre>
+
+        <h3>What Whisper heard</h3>
+        <pre id="tts-heard" class="box">—</pre>
+
+        <h3>Clips</h3>
+        <p class="muted">Every clip from this session; play them back to compare settings.</p>
+        <table id="tts-history">
+          <thead>
+            <tr>
+              <th>#</th><th>Voice</th><th>Intonation</th><th>Speed</th><th>Length</th>
+              <th>Pitch spread</th><th>First audio</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </section>
     </main>
 
